@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { motion } from "framer-motion";
+import BlogCard from "./BlogCard";
+import SubscriptionsBlog from "./SubscriptionsBlog";
 
 const categories = [
   { key: "all", label: "All" },
@@ -14,7 +17,7 @@ const BlogList = () => {
     <div>
       <div className="flex justify-center gap-4 sm:gap-8 my-10">
         {categories.map((cat) => (
-          <button
+          <motion.button
             key={cat.key}
             onClick={() => setSelectedCategory(cat.key)}
             className={`px-4 py-2 rounded-full border transition-colors ${
@@ -22,12 +25,19 @@ const BlogList = () => {
                 ? "bg-primary text-white border-primary"
                 : "bg-white text-primary border-primary/30 hover:bg-primary/10"
             }`}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.95 }}
+            animate={
+              selectedCategory === cat.key
+                ? { scale: 1.12, boxShadow: "0px 4px 20px rgba(55, 120, 250, 0.06)" }
+                : { scale: 1, boxShadow: "0px 0px 0px rgba(0,0,0,0)" }
+            }
+            transition={{ type: "spring", stiffness: 350, damping: 20 }}
           >
             {cat.label}
-          </button>
+          </motion.button>
         ))}
       </div>
-      <div>{/* Blog cards will be filtered by selectedCategory */}</div>
     </div>
   );
 };

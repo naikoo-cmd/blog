@@ -4,8 +4,8 @@ import logo from "../assets/favicon.svg";
 
 const Navbar = () => {
   const handleLogin = () => {
-    // Add your login logic here
-    console.log("Login clicked");
+    // Redirect to the login page
+    window.location.href = "/admin";
   };
 
   return (
