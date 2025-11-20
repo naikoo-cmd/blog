@@ -1,5 +1,6 @@
+import { verifyToken } from "./api.js";
+
 const SESSION_KEY = "adminSession";
-const SESSION_TTL_MS = 1000 * 60 * 60 * 4; // 4 hours
 
 const isBrowser = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 
@@ -23,36 +24,43 @@ const persistSession = (session) => {
   }
 };
 
-export const isAdminAuthenticated = () => {
+/**
+ * Check if user is authenticated by verifying the JWT token with the backend
+ */
+export const isAdminAuthenticated = async () => {
   const session = readSession();
-  if (!session) return false;
-
-  const expired = typeof session.expiresAt !== "number" || session.expiresAt < Date.now();
-  if (expired) {
-    clearAdminSession();
+  if (!session || !session.token) {
     return false;
   }
 
-  return Boolean(session.token);
-};
-
-const generateToken = () => {
-  if (typeof crypto !== "undefined") {
-    if (typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
-    }
-    if (typeof crypto.getRandomValues === "function") {
-      const array = crypto.getRandomValues(new Uint32Array(4));
-      return Array.from(array, (value) => value.toString(16)).join("-");
-    }
+  // Verify token with backend
+  try {
+    await verifyToken();
+    return true;
+  } catch (error) {
+    // Token is invalid or expired
+    clearAdminSession();
+    return false;
   }
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-export const startAdminSession = () => {
+/**
+ * Synchronous check for client-side routing (may not be 100% accurate)
+ * For actual protection, use the async version or protect routes on the backend
+ */
+export const isAdminAuthenticatedSync = () => {
+  const session = readSession();
+  return Boolean(session && session.token);
+};
+
+/**
+ * Start admin session with JWT token from backend
+ */
+export const startAdminSession = (token, user) => {
   const session = {
-    token: generateToken(),
-    expiresAt: Date.now() + SESSION_TTL_MS,
+    token,
+    user,
+    timestamp: Date.now(),
   };
 
   persistSession(session);
