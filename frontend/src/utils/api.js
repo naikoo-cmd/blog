@@ -118,3 +118,22 @@ export const createBlog = async (blogData) => {
   }
 };
 
+/**
+ * Get all blog posts
+ */
+export const getAllBlogs = async () => {
+  return apiRequest("/admin/blogs", {
+    method: "GET",
+  });
+};
+
+/**
+ * Delete a blog post
+ * @param {string} blogId - The ID of the blog to delete
+ */
+export const deleteBlog = async (blogId) => {
+  return apiRequest(`/admin/blogs/${blogId}`, {
+    method: "DELETE",
+  });
+};
+

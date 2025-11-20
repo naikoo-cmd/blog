@@ -8,6 +8,7 @@ import Layout from "./pages/admin/Layout";
 import Dashboard from "./pages/admin/Dashboard";
 import AddBlog from "./pages/admin/AddBlog";
 import ListBlog from "./pages/admin/ListBlog";
+import EditBlog from "./pages/admin/EditBlog";
 import Comments from "./pages/admin/Comments";
 import Login from "./components/admin/Login";
 import RequireAdmin from "./routes/RequireAdmin";
@@ -35,6 +36,7 @@ const App = () => {
           <Route index element={<Dashboard />} />
           <Route path="addBlog" element={<AddBlog />} />
           <Route path="listBlog" element={<ListBlog />} />
+          <Route path="editBlog/:id" element={<EditBlog />} />
           <Route path="comments" element={<Comments />} />
         </Route>
       </Routes>
