@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { getAllComments, getAllBlogs } from "../../utils/api.js";
 
 const navItems = [
   {
@@ -72,10 +73,61 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    label: "Settings",
+    to: "/admin/settings",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004 15.4a1.65 1.65 0 00-1.51-1H2.4a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 007.6 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1h.09a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
+        />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    ),
+  },
 ];
 
 const Sidebar = ({ onNavigate, onLogout }) => {
   const navigate = useNavigate();
+  const [pendingCommentsCount, setPendingCommentsCount] = useState(0);
+  const [draftPostsCount, setDraftPostsCount] = useState(0);
+
+  useEffect(() => {
+    fetchPendingCommentsCount();
+    fetchDraftPostsCount();
+    // Refresh counts every 30 seconds
+    const interval = setInterval(() => {
+      fetchPendingCommentsCount();
+      fetchDraftPostsCount();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchPendingCommentsCount = async () => {
+    try {
+      const response = await getAllComments();
+      if (response.success && response.data) {
+        const pending = response.data.filter((comment) => comment.status === "pending").length;
+        setPendingCommentsCount(pending);
+      }
+    } catch (err) {
+      console.error("Error fetching pending comments count:", err);
+    }
+  };
+
+  const fetchDraftPostsCount = async () => {
+    try {
+      const response = await getAllBlogs();
+      if (response.success && response.data) {
+        const drafts = response.data.filter((blog) => (blog.status || "published") === "draft").length;
+        setDraftPostsCount(drafts);
+      }
+    } catch (err) {
+      console.error("Error fetching draft posts count:", err);
+    }
+  };
 
   const handleBackToSite = () => {
     navigate("/");
@@ -97,22 +149,38 @@ const Sidebar = ({ onNavigate, onLogout }) => {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/admin"}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${
-                isActive ? "bg-primary text-white shadow-md shadow-primary/20" : "text-gray-600 hover:bg-primary/10"
-              }`
-            }
-          >
-            <span className="text-gray-400">{item.icon}</span>
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
+        {navItems.map((item) => {
+          const isComments = item.to === "/admin/comments";
+          const isListBlog = item.to === "/admin/listBlog";
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/admin"}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                `flex items-center justify-between gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${
+                  isActive ? "bg-primary text-white shadow-md shadow-primary/20" : "text-gray-600 hover:bg-primary/10"
+                }`
+              }
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-gray-400">{item.icon}</span>
+                <span>{item.label}</span>
+              </div>
+              {isComments && pendingCommentsCount > 0 && (
+                <span className="bg-yellow-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                  {pendingCommentsCount > 99 ? "99+" : pendingCommentsCount}
+                </span>
+              )}
+              {isListBlog && draftPostsCount > 0 && (
+                <span className="bg-yellow-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                  {draftPostsCount > 99 ? "99+" : draftPostsCount}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       <div className="px-4 pb-6 space-y-3">

@@ -1,14 +1,105 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getBlogPostById, formatDate } from "../data/blogPosts";
+import { formatDate } from "../data/blogPosts";
+import { getPublishedBlogById, getApprovedComments, createComment } from "../utils/api.js";
 import Footer from "../components/Footer";
 
 const BlogDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const post = getBlogPostById(id);
+  const [post, setPost] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [commentAuthor, setCommentAuthor] = useState("");
+  const [commentContent, setCommentContent] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  if (!post) {
+  useEffect(() => {
+    fetchBlog();
+    fetchComments();
+  }, [id]);
+
+  const fetchBlog = async () => {
+    try {
+      setLoading(true);
+      const response = await getPublishedBlogById(id);
+      if (response.success && response.data) {
+        setPost(response.data);
+      } else {
+        setError("Blog post not found");
+      }
+    } catch (err) {
+      console.error("Error fetching blog:", err);
+      setError(err.message || "Failed to load blog post");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchComments = async () => {
+    try {
+      const response = await getApprovedComments(id);
+      if (response.success && response.data) {
+        setComments(response.data);
+      }
+    } catch (err) {
+      console.error("Error fetching comments:", err);
+    }
+  };
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 4000);
+  };
+
+  const handleSubmitComment = async (e) => {
+    e.preventDefault();
+    if (!commentContent.trim()) {
+      showToast("Please enter a comment", "error");
+      return;
+    }
+
+    try {
+      setIsSubmittingComment(true);
+      const response = await createComment(id, commentAuthor, commentContent);
+      if (response.success) {
+        setCommentAuthor("");
+        setCommentContent("");
+        showToast("Comment submitted successfully! It will be reviewed before being published.", "success");
+      }
+    } catch (err) {
+      console.error("Error submitting comment:", err);
+      showToast(err.message || "Failed to submit comment", "error");
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  const getTagColor = (tag) => {
+    const tagLower = tag?.toLowerCase() || "";
+    if (tagLower === "technology") return "bg-blue-100 text-blue-600";
+    if (tagLower === "finance") return "bg-green-100 text-green-600";
+    if (tagLower === "lifestyle") return "bg-pink-100 text-pink-600";
+    return "bg-gray-100 text-gray-600";
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-gray-600">Loading blog post...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !post) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -24,47 +115,135 @@ const BlogDetail = () => {
     );
   }
 
-  const getTagColor = (tag) => {
-    switch (tag) {
-      case "Technology":
-        return "bg-blue-100 text-blue-600";
-      case "Finance":
-        return "bg-green-100 text-green-600";
-      case "Lifestyle":
-        return "bg-pink-100 text-pink-600";
-      default:
-        return "bg-gray-100 text-gray-600";
-    }
-  };
+  const mainImage = post.thumbnailUrl || (post.images && post.images[0]?.url) || "";
+  const additionalImages = post.images && post.images.length > 0 
+    ? (post.thumbnailUrl ? post.images : post.images.slice(1))
+    : [];
 
   return (
     <>
-      <article className="min-h-screen bg-white">
-        {/* Hero Image Section */}
-        <div className="relative w-full h-[50vh] sm:h-[60vh] lg:h-[70vh] overflow-hidden">
-          <img src={post.image} alt={post.title} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-black/20" />
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-6 right-6 z-50 px-6 py-3 rounded-lg shadow-xl font-semibold text-sm transition-all duration-300 ${
+            toast.type === "success"
+              ? "bg-green-500 text-white"
+              : toast.type === "error"
+              ? "bg-red-500 text-white"
+              : "bg-primary text-white"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
 
-          {/* Back Button */}
-          <button
-            onClick={() => navigate(-1)}
-            className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10 bg-white/90 hover:bg-white text-gray-800 rounded-full p-2 sm:p-3 transition-all duration-200 shadow-lg hover:shadow-xl"
-            aria-label="Go back"
-          >
-            <svg
-              className="w-5 h-5 sm:w-6 sm:h-6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+      <article className="min-h-screen bg-white relative">
+        {/* Main Image Section - Reduced Size */}
+        <div className="relative w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-8">
+          {mainImage && (
+            <>
+              {/* Back Button - Above Image Container */}
+              <div className="mb-4">
+                <button
+                  onClick={() => navigate(-1)}
+                  className="bg-white/95 hover:bg-white text-gray-800 rounded-full p-3 transition-all duration-200 shadow-lg hover:shadow-xl backdrop-blur-sm"
+                  aria-label="Go back"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="relative w-full h-[30vh] sm:h-[35vh] lg:h-[40vh] rounded-2xl overflow-hidden shadow-xl">
+                <img 
+                  src={mainImage} 
+                  alt={post.title} 
+                  className="w-full h-full object-cover" 
+                  onError={(e) => {
+                    e.target.src = "https://via.placeholder.com/1200x600?text=No+Image";
+                  }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+              </div>
+
+              {/* Additional Images Thumbnails */}
+              {additionalImages.length > 0 && (
+                <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
+                  {additionalImages.map((image, index) => (
+                    <div
+                      key={index}
+                      onClick={() => setSelectedImage(image.url)}
+                      className="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden shadow-md cursor-pointer hover:shadow-xl transition-all hover:scale-105"
+                    >
+                      <img
+                        src={image.url}
+                        alt={`${post.title} - Image ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.src = "https://via.placeholder.com/200?text=No+Image";
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Additional Images Thumbnails (when no main image) */}
+          {!mainImage && (
+            <>
+              {/* Back Button - When no main image */}
+              <div className="mb-4">
+                <button
+                  onClick={() => navigate(-1)}
+                  className="bg-white/95 hover:bg-white text-gray-800 rounded-full p-3 transition-all duration-200 shadow-lg hover:shadow-xl backdrop-blur-sm"
+                  aria-label="Go back"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              </div>
+              {post.images && post.images.length > 0 && (
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {post.images.map((image, index) => (
+                    <div
+                      key={index}
+                      onClick={() => setSelectedImage(image.url)}
+                      className="flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden shadow-md cursor-pointer hover:shadow-xl transition-all hover:scale-105"
+                    >
+                      <img
+                        src={image.url}
+                        alt={`${post.title} - Image ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.src = "https://via.placeholder.com/200?text=No+Image";
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Content Section */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-16 sm:-mt-20 relative z-10">
+        <div className={`max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 ${mainImage ? "mt-0" : "mt-20"} relative z-10`}>
           {/* Card Container */}
           <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 lg:p-12">
             {/* Tag */}
@@ -75,9 +254,14 @@ const BlogDetail = () => {
             </div>
 
             {/* Title */}
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 leading-tight">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-2 leading-tight">
               {post.title}
             </h1>
+
+            {/* Subtitle */}
+            {post.subtitle && (
+              <p className="text-xl text-gray-600 mb-4">{post.subtitle}</p>
+            )}
 
             {/* Meta Information */}
             <div className="flex flex-wrap items-center gap-4 sm:gap-6 mb-8 pb-6 border-b border-gray-200">
@@ -92,26 +276,10 @@ const BlogDetail = () => {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                  />
-                </svg>
-                <span className="text-gray-700 font-medium">{post.creator}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <svg
-                  className="w-5 h-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
-                <span className="text-gray-600 text-sm sm:text-base">{formatDate(post.date)}</span>
+                <span className="text-gray-600 text-sm sm:text-base">{formatDate(post.createdAt)}</span>
               </div>
             </div>
 
@@ -127,6 +295,7 @@ const BlogDetail = () => {
                 prose-img:rounded-lg prose-img:shadow-lg prose-img:my-8"
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
+
           </div>
 
           {/* Share Section */}
@@ -171,8 +340,100 @@ const BlogDetail = () => {
               </a>
             </div>
           </div>
+
+          {/* Comments Section */}
+          <div className="mt-12 pt-8 border-t border-gray-200">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Comments ({comments.length})</h2>
+
+            {/* Comment Form */}
+            <form onSubmit={handleSubmitComment} className="mb-8 bg-gray-50 rounded-lg p-6">
+              <div className="mb-4">
+                <label htmlFor="commentAuthor" className="block text-sm font-medium text-gray-700 mb-2">
+                  Name (Optional)
+                </label>
+                <input
+                  type="text"
+                  id="commentAuthor"
+                  value={commentAuthor}
+                  onChange={(e) => setCommentAuthor(e.target.value)}
+                  placeholder="Your name (leave blank for anonymous)"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+              </div>
+              <div className="mb-4">
+                <label htmlFor="commentContent" className="block text-sm font-medium text-gray-700 mb-2">
+                  Comment <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  id="commentContent"
+                  value={commentContent}
+                  onChange={(e) => setCommentContent(e.target.value)}
+                  placeholder="Write your comment here..."
+                  rows={4}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-y"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmittingComment || !commentContent.trim()}
+                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmittingComment ? "Submitting..." : "Submit Comment"}
+              </button>
+              <p className="mt-2 text-xs text-gray-500">
+                Your comment will be reviewed before being published.
+              </p>
+            </form>
+
+            {/* Comments List */}
+            {comments.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No comments yet. Be the first to comment!</p>
+            ) : (
+              <div className="space-y-6">
+                {comments.map((comment) => (
+                  <div key={comment._id} className="bg-gray-50 rounded-lg p-6">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="font-semibold text-gray-900">{comment.author || "Anonymous"}</p>
+                        <p className="text-sm text-gray-500">{formatDate(comment.createdAt)}</p>
+                      </div>
+                    </div>
+                    <p className="text-gray-700 whitespace-pre-wrap">{comment.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </article>
+
+      {/* Image Popup Modal */}
+      {selectedImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div className="relative max-w-7xl max-h-[90vh] mx-4">
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img
+              src={selectedImage}
+              alt="Preview"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
+
       <Footer />
     </>
   );

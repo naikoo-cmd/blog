@@ -4,6 +4,9 @@ import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.js";
 import adminRoutes from "./routes/admin.js";
+import blogRoutes from "./routes/blogs.js";
+import commentRoutes from "./routes/comments.js";
+import { initializePredefinedTags } from "./controllers/tagController.js";
 
 dotenv.config();
 
@@ -22,6 +25,8 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/blogs", blogRoutes);
+app.use("/api/comments", commentRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -31,8 +36,10 @@ app.get("/api/health", (req, res) => {
 // MongoDB Connection
 mongoose
   .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/myblog")
-  .then(() => {
+  .then(async () => {
     console.log("Connected to MongoDB");
+    // Initialize predefined tags
+    await initializePredefinedTags();
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });

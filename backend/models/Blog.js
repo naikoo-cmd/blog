@@ -18,12 +18,24 @@ const blogSchema = new mongoose.Schema({
   },
   thumbnailUrl: {
     type: String,
-    required: true
+    required: false,
+    default: ""
   },
   thumbnailId: {
     type: String,
-    required: true
+    required: false,
+    default: ""
   },
+  images: [{
+    url: {
+      type: String,
+      required: true
+    },
+    publicId: {
+      type: String,
+      required: true
+    }
+  }],
   description: {
     type: String,
     required: true,
@@ -31,6 +43,12 @@ const blogSchema = new mongoose.Schema({
   },
   content: {
     type: String,
+    required: true
+  },
+  status: {
+    type: String,
+    enum: ["published", "draft"],
+    default: "draft",
     required: true
   }
 }, {

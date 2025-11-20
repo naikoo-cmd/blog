@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getAllBlogs, deleteBlog } from "../../utils/api.js";
+import { getAllBlogs, deleteBlog, updateBlogStatus } from "../../utils/api.js";
+import ConfirmModal from "../../components/admin/ConfirmModal.jsx";
 
 const ListBlog = () => {
   const [blogs, setBlogs] = useState([]);
@@ -8,6 +9,8 @@ const ListBlog = () => {
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [toast, setToast] = useState(null);
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, blogId: null });
   const navigate = useNavigate();
 
   // Fetch blogs on component mount
@@ -37,10 +40,13 @@ const ListBlog = () => {
     navigate(`/admin/editBlog/${blogId}`);
   };
 
-  const handleDelete = async (blogId) => {
-    if (!window.confirm("Are you sure you want to delete this blog post?")) {
-      return;
-    }
+  const handleDeleteClick = (blogId) => {
+    setConfirmModal({ isOpen: true, blogId });
+  };
+
+  const handleDeleteConfirm = async () => {
+    const { blogId } = confirmModal;
+    if (!blogId) return;
 
     try {
       setDeletingId(blogId);
@@ -50,11 +56,40 @@ const ListBlog = () => {
       setBlogs((prevBlogs) => prevBlogs.filter((blog) => blog._id !== blogId));
 
       showToast("Blog deleted successfully", "success");
+      setConfirmModal({ isOpen: false, blogId: null });
     } catch (err) {
       console.error("Error deleting blog:", err);
       showToast(err.message || "Failed to delete blog", "error");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setConfirmModal({ isOpen: false, blogId: null });
+  };
+
+  const handleStatusToggle = async (blogId, currentStatus) => {
+    if (!blogId) return;
+    const nextStatus = currentStatus === "published" ? "draft" : "published";
+
+    try {
+      setStatusUpdatingId(blogId);
+      const response = await updateBlogStatus(blogId, nextStatus);
+
+      if (!response.success) {
+        throw new Error(response.message || "Failed to update status");
+      }
+
+      setBlogs((prevBlogs) =>
+        prevBlogs.map((blog) => (blog._id === blogId ? { ...blog, status: nextStatus } : blog))
+      );
+      showToast(`Blog ${nextStatus === "published" ? "published" : "unpublished"} successfully`, "success");
+    } catch (err) {
+      console.error("Error updating blog status:", err);
+      showToast(err.message || "Failed to update blog status", "error");
+    } finally {
+      setStatusUpdatingId(null);
     }
   };
 
@@ -104,6 +139,18 @@ const ListBlog = () => {
 
   return (
     <>
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Blog Post"
+        message="Are you sure you want to delete this blog post? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
       {/* Toast Notification */}
       {toast && (
         <div
@@ -163,6 +210,9 @@ const ListBlog = () => {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Posted Date
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Status
+                    </th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Actions
                     </th>
@@ -205,9 +255,34 @@ const ListBlog = () => {
                         {formatDate(blog.createdAt)}
                       </td>
 
+                      {/* Status */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                            blog.status === "published"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {blog.status === "published" ? "Published" : "Draft"}
+                        </span>
+                      </td>
+
                       {/* Actions */}
                       <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleStatusToggle(blog._id, blog.status)}
+                            disabled={statusUpdatingId === blog._id}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed border border-gray-200"
+                            title={blog.status === "published" ? "Unpublish blog" : "Publish blog"}
+                          >
+                            {statusUpdatingId === blog._id
+                              ? "Updating..."
+                              : blog.status === "published"
+                              ? "Unpublish"
+                              : "Publish"}
+                          </button>
                           <button
                             onClick={() => handleEdit(blog._id)}
                             className="px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition text-sm font-medium shadow-sm hover:shadow-md"
@@ -216,7 +291,7 @@ const ListBlog = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDelete(blog._id)}
+                            onClick={() => handleDeleteClick(blog._id)}
                             disabled={deletingId === blog._id}
                             className="px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Delete blog"

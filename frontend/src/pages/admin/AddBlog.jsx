@@ -4,7 +4,8 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import { Color } from "@tiptap/extension-color";
-import { createBlog } from "../../utils/api.js";
+import { createBlog, getAllTags, createTag, deleteTag } from "../../utils/api.js";
+import ConfirmModal from "../../components/admin/ConfirmModal.jsx";
 
 const AddBlog = () => {
   const [formData, setFormData] = useState({
@@ -14,12 +15,35 @@ const AddBlog = () => {
     description: "",
     content: "",
     thumbnail: null,
+    images: [],
   });
 
+  const [tags, setTags] = useState([]);
+  const [showCreateTag, setShowCreateTag] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, tagId: null, isPredefined: false });
   const fileInputRef = useRef(null);
+  const imagesInputRef = useRef(null);
+
+  // Fetch tags on mount
+  useEffect(() => {
+    fetchTags();
+  }, []);
+
+  const fetchTags = async () => {
+    try {
+      const response = await getAllTags();
+      if (response.success && response.data) {
+        setTags(response.data);
+      }
+    } catch (err) {
+      console.error("Error fetching tags:", err);
+    }
+  };
 
   // Prevent double form clear logic
   const clearForm = () => {
@@ -30,10 +54,15 @@ const AddBlog = () => {
       description: "",
       content: "",
       thumbnail: null,
+      images: [],
     });
     setThumbnailPreview(null);
+    setImagePreviews([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+    if (imagesInputRef.current) {
+      imagesInputRef.current.value = "";
     }
     if (editor) {
       editor.commands.clearContent();
@@ -90,7 +119,7 @@ const AddBlog = () => {
     }
   }, [formData.content, editor]);
 
-  const handleFileChange = (e) => {
+  const handleThumbnailChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       // Validate file type
@@ -119,7 +148,46 @@ const AddBlog = () => {
     }
   };
 
-  const handleRemoveImage = () => {
+  const handleImagesChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Validate all files
+    const validFiles = [];
+    const invalidFiles = [];
+
+    files.forEach((file) => {
+      if (!file.type.startsWith("image/")) {
+        invalidFiles.push(file.name);
+      } else if (file.size > 5 * 1024 * 1024) {
+        invalidFiles.push(`${file.name} (too large)`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    if (invalidFiles.length > 0) {
+      showToast(`Invalid files: ${invalidFiles.join(", ")}`, "error");
+    }
+
+    if (validFiles.length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        images: [...prev.images, ...validFiles],
+      }));
+
+      // Create previews
+      validFiles.forEach((file) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreviews((prev) => [...prev, reader.result]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemoveThumbnail = () => {
     setFormData((prev) => ({
       ...prev,
       thumbnail: null,
@@ -128,6 +196,63 @@ const AddBlog = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const handleRemoveImage = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) {
+      showToast("Tag name is required", "error");
+      return;
+    }
+
+    try {
+      const response = await createTag(newTagName.trim(), newTagName.trim());
+      if (response.success) {
+        setTags((prev) => [...prev, response.data]);
+        setFormData((prev) => ({ ...prev, tag: response.data.displayName }));
+        setNewTagName("");
+        setShowCreateTag(false);
+        showToast("Tag created successfully", "success");
+      }
+    } catch (err) {
+      showToast(err.message || "Failed to create tag", "error");
+    }
+  };
+
+  const handleDeleteTagClick = (tagId, isPredefined) => {
+    if (isPredefined) {
+      showToast("Cannot delete predefined tags", "error");
+      return;
+    }
+    setConfirmModal({ isOpen: true, tagId, isPredefined });
+  };
+
+  const handleDeleteTagConfirm = async () => {
+    const { tagId } = confirmModal;
+    if (!tagId) return;
+
+    try {
+      await deleteTag(tagId);
+      setTags((prev) => prev.filter((tag) => tag._id !== tagId));
+      if (formData.tag === tags.find((t) => t._id === tagId)?.displayName) {
+        setFormData((prev) => ({ ...prev, tag: "" }));
+      }
+      showToast("Tag deleted successfully", "success");
+      setConfirmModal({ isOpen: false, tagId: null, isPredefined: false });
+    } catch (err) {
+      showToast(err.message || "Failed to delete tag", "error");
+    }
+  };
+
+  const handleDeleteTagCancel = () => {
+    setConfirmModal({ isOpen: false, tagId: null, isPredefined: false });
   };
 
   // Improved toast UX, properly clears timeout
@@ -148,7 +273,7 @@ const AddBlog = () => {
     };
   }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, status = "published") => {
     e.preventDefault();
     setIsSubmitting(true);
 
@@ -161,12 +286,6 @@ const AddBlog = () => {
 
     if (!formData.tag.trim()) {
       showToast("Blog tag is required", "error");
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (!formData.thumbnail) {
-      showToast("Blog thumbnail is required", "error");
       setIsSubmitting(false);
       return;
     }
@@ -196,9 +315,16 @@ const AddBlog = () => {
         description: formData.description.trim(), // Brief description from textarea
         content: formData.content, // Rich text content from editor
         thumbnail: formData.thumbnail,
+        images: formData.images,
+        status: status, // Add status field
       });
 
-      showToast("Blog post created successfully!", "success");
+      showToast(
+        status === "published"
+          ? "Blog post created and published successfully!"
+          : "Blog post saved as draft successfully!",
+        "success"
+      );
       clearForm();
     } catch (error) {
       console.error("Error creating blog:", error);
@@ -206,6 +332,10 @@ const AddBlog = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSaveDraft = async (e) => {
+    await handleSubmit(e, "draft");
   };
 
   // Toolbar button component
@@ -224,6 +354,18 @@ const AddBlog = () => {
 
   return (
     <>
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={handleDeleteTagCancel}
+        onConfirm={handleDeleteTagConfirm}
+        title="Delete Tag"
+        message="Are you sure you want to delete this tag? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
       {/* Toast Notification */}
       {toast && (
         <div
@@ -289,29 +431,93 @@ const AddBlog = () => {
               <label htmlFor="tag" className="block text-sm font-semibold text-gray-700 mb-2">
                 Blog Tag <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                id="tag"
-                name="tag"
-                value={formData.tag}
-                onChange={handleChange}
-                placeholder="e.g., Technology, Finance, Lifestyle"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition bg-gray-50 hover:bg-white"
-                required
-              />
+              <div className="relative">
+                <select
+                  id="tag"
+                  name="tag"
+                  value={formData.tag}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition bg-gray-50 hover:bg-white"
+                  required
+                >
+                  <option value="">Select a tag</option>
+                  {tags.map((tag) => (
+                    <option key={tag._id} value={tag.displayName}>
+                      {tag.displayName}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateTag(!showCreateTag)}
+                    className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                  >
+                    {showCreateTag ? "Cancel" : "+ Create New Tag"}
+                  </button>
+                  {showCreateTag && (
+                    <div className="flex gap-2 flex-1">
+                      <input
+                        type="text"
+                        value={newTagName}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                        placeholder="Enter tag name"
+                        className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleCreateTag();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateTag}
+                        className="px-4 py-1.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition text-sm"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {tags.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {tags.map((tag) => (
+                      <div key={tag._id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
+                        <span className="text-sm text-gray-700">{tag.displayName}</span>
+                        {!tag.isPredefined && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTagClick(tag._id, tag.isPredefined)}
+                            className="text-red-500 hover:text-red-700 text-sm"
+                            title="Delete tag"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Blog Thumbnail/Picture Upload */}
+            {/* Blog Thumbnail/Picture Upload (Optional) */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Blog Thumbnail <span className="text-red-500">*</span>
-              </label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Blog Thumbnail (Optional)</label>
               {!thumbnailPreview ? (
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary transition-colors">
                   <input
                     type="file"
                     ref={fileInputRef}
-                    onChange={handleFileChange}
+                    onChange={handleThumbnailChange}
                     accept="image/*"
                     className="hidden"
                     id="thumbnail-upload"
@@ -336,11 +542,60 @@ const AddBlog = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={handleRemoveImage}
+                    onClick={handleRemoveThumbnail}
                     className="mt-3 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm font-medium"
                   >
-                    Remove Image
+                    Remove Thumbnail
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* Additional Images Upload (Optional) */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Additional Images (Optional)</label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary transition-colors">
+                <input
+                  type="file"
+                  ref={imagesInputRef}
+                  onChange={handleImagesChange}
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  id="images-upload"
+                />
+                <label htmlFor="images-upload" className="cursor-pointer flex flex-col items-center">
+                  <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-700 mb-1">Click to upload additional images</span>
+                  <span className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB each</span>
+                </label>
+              </div>
+              {imagePreviews.length > 0 && (
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {imagePreviews.map((preview, index) => (
+                    <div key={index} className="relative">
+                      <div className="border border-gray-300 rounded-lg overflow-hidden">
+                        <img src={preview} alt={`Preview ${index + 1}`} className="w-full h-32 object-cover" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(index)}
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                        title="Remove image"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -533,14 +788,22 @@ const AddBlog = () => {
               </p>
             </div>
 
-            {/* Submit Button */}
+            {/* Submit Buttons */}
             <div className="flex gap-4 pt-4">
               <button
                 type="submit"
                 disabled={isSubmitting}
                 className="flex-1 sm:flex-none sm:px-8 py-3 bg-primary text-white font-semibold rounded-lg hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
               >
-                {isSubmitting ? "Creating..." : "Create Blog Post"}
+                {isSubmitting ? "Creating..." : "Publish Blog Post"}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={isSubmitting}
+                className="flex-1 sm:flex-none sm:px-8 py-3 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+              >
+                {isSubmitting ? "Saving..." : "Save as Draft"}
               </button>
               <button
                 type="button"
