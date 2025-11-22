@@ -3,7 +3,7 @@ import React from "react";
 const Footer = () => {
   const year = new Date().getFullYear();
   return (
-    <footer className="w-full bg-gradient-to-r from-primary/10 via-gray-50 to-primary/10 mt-10 shadow-inner">
+    <footer className="w-full footer-gradient mt-10 shadow-inner">
       <div className="max-w-7xl mx-auto px-5 flex flex-col sm:flex-row items-center justify-between py-6 gap-3">
         <p className="text-gray-600 text-xs sm:text-sm text-center sm:text-left w-full flex items-center gap-2 justify-center sm:justify-start">
           <span className="flex items-center gap-1">
@@ -22,7 +22,7 @@ const Footer = () => {
               &copy; {year} <span className="font-semibold text-primary">Blog | Nico Aramy</span>
             </span>
           </span>
-          <span className="hidden sm:inline text-gray-300 mx-2">|</span>
+          <span className="hidden sm:inline text-gray-400 mx-2">|</span>
           <span className="italic text-primary/70 hidden sm:inline">Stay curious. Stay inspired.</span>
         </p>
         <div className="flex flex-wrap gap-4 justify-center sm:justify-end w-full">

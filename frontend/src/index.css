@@ -73,6 +73,10 @@ body {
   border-color: var(--border-color) !important;
 }
 
+.footer-gradient {
+  background: linear-gradient(to right, rgba(80, 68, 229, 0.1), var(--muted-bg), rgba(80, 68, 229, 0.1));
+}
+
 @theme {
   --color-primary: #5044e5;
 }
